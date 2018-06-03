@@ -29,25 +29,32 @@ isValue t = case t of
   _    -> isNumericValue t
 
 evaluate1step t = case t of
-  (If Tru thn _)    -> thn
-  (If Fals _ els)   -> els
-  (If cond thm els) -> (If cond' thm els)
-    where cond' = evaluate1step cond
-  (Succ n)          -> Succ n'
-    where n' = evaluate1step n
-  (Pred Zero)       -> Zero
-  (Pred (Succ n))   -> n
-  (Pred t)          -> Pred t'
-    where t' = evaluate1step t
-  (IsZero Zero)     -> Tru
-  (IsZero (Succ _)) -> Fals
-  (IsZero t)        -> IsZero t'
-    where t' = evaluate1step t
-  _                 -> t
+  (If Tru thn _)    -> Just thn
+  (If Fals _ els)   -> Just els
+  (If cond thm els) -> case maybeCond of
+                         Just cond' -> Just (If cond' thm els)
+                         _          -> maybeCond
+                       where maybeCond = evaluate1step cond
+  (Succ n)          -> case maybeN of
+                         Just n' -> Just (Succ n')
+                         _       -> maybeN
+                       where maybeN = evaluate1step n
+  (Pred Zero)       -> Just Zero
+  (Pred (Succ n))   -> Just n
+  (Pred t)          -> case maybeT of
+                         Just t' -> Just (Pred t')
+                         _       -> maybeT
+                       where maybeT = evaluate1step t
+  (IsZero Zero)     -> Just Tru
+  (IsZero (Succ _)) -> Just Fals
+  (IsZero t)        -> case maybeT of
+                         Just t' -> Just (IsZero t')
+                         _       -> maybeT
+                       where maybeT = evaluate1step t
+  _                 -> Nothing
 
-evaluate t
-  | isValue t  = t
-  | otherwise =  evaluate t'
-      where t' = evaluate1step t
-
+evaluate t = case maybeT of
+    Just t' -> evaluate t'
+    _       -> t
+  where maybeT = evaluate1step t
 
