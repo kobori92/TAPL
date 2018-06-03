@@ -26,6 +26,7 @@ evaluate1step t = case t of
   (Succ n)              -> Succ n'
     where n' = evaluate1step n
   (Pred Zero)           -> Zero
+  (Pred (Succ n))       -> n
   (Pred t)              -> Pred t'
     where t' = evaluate1step t
   (IsZero Zero)         -> Main.True
@@ -36,7 +37,7 @@ evaluate1step t = case t of
 
 evaluate t
   | isValue t  = t
-  | Prelude.True =  evaluate t'
+  | otherwise =  evaluate t'
       where t' = evaluate1step t
 
 
