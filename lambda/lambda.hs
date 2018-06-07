@@ -40,3 +40,35 @@ shiftTerm term distance = shift term distance 0
 
 x = Var 0
 abs = Abs "x" x
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+isValue :: Context -> Term -> Bool
+isValue context term = case term of
+        Abs _ _ -> True
+        _       -> False
+
+evaluate1step :: Context -> Term -> Maybe Term
+evaluate1step context term = case term of
+        App (Abs x body) value && isValue value ->
+               Just term
+        _  -> Nothing
