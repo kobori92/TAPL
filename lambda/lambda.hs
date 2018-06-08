@@ -38,50 +38,35 @@ shiftTerm term distance = shift term 0
                                 where shiftedFunc = shift func cut;
                                       shiftedArg = shift arg cut
 
-substitute :: Int -> Term -> Term -> Term
-substitute targetIndex argTerm term = case term of
-    Var index     -> if index == targetIndex
-                        then argTerm
-                        else term
-    Abs name body -> Abs name body'
-                        where
-                             body' = substitute (targetIndex + 1) (shiftTerm argTerm 1) body
-    App func arg  -> App func' arg'
-                        where
-                            func' = substitute targetIndex argTerm func;
-                            arg' = substitute targetIndex argTerm arg
-
-x = Var 0
-abs = Abs "x" x
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+substituteTerm :: Term -> Term -> Term
+substituteTerm func arg = shiftTerm term (-1)
+    where term = substitute 0 arg' func
+            where
+                arg' = shiftTerm arg 1;
+                substitute targetIndex argTerm term = case term of
+                    Var index     -> if index == targetIndex
+                                        then argTerm
+                                        else term
+                    Abs name body -> Abs name body'
+                                        where
+                                            body' = substitute (targetIndex + 1) (shiftTerm argTerm 1) body
+                    App func arg  -> App func' arg'
+                                        where
+                                            func' = substitute targetIndex argTerm func;
+                                            arg' = substitute targetIndex argTerm arg
 
 isValue :: Context -> Term -> Bool
 isValue context term = case term of
         Abs _ _ -> True
         _       -> False
 
+
 evaluate1step :: Context -> Term -> Maybe Term
 evaluate1step context term = case term of
-        App (Abs x body) value && isValue value ->
-               Just term
+        App (Abs x body) arg
+            | isValue context term -> Just term
+            | otherwise            -> Nothing
+        App func arg
+            | isValue context func -> Just arg
+            | otherwise -> Nothing
         _  -> Nothing
