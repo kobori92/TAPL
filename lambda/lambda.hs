@@ -61,12 +61,25 @@ isValue context term = case term of
         _       -> False
 
 
-evaluate1step :: Context -> Term -> Maybe Term
+evaluate1step :: Context -> Maybe Term -> Maybe Term
 evaluate1step context term = case term of
-        App (Abs x body) arg
-            | isValue context term -> Just term
-            | otherwise            -> Nothing
-        App func arg
-            | isValue context func -> Just arg
-            | otherwise -> Nothing
-        _  -> Nothing
+        Just (App (Abs x body) arg)
+            | isValue context arg -> Just $ substituteTerm body arg
+            | otherwise           -> Just (App (Abs x body) arg')
+                                        where Just arg' = evaluate1step context $ Just arg
+        Just (App func arg)       -> Just (App func' arg)
+                                        where Just func' = evaluate1step context $ Just func
+        _                         -> Nothing
+
+evaluate :: Context -> Term -> Term
+evaluate context term =
+    case mTerm' of
+        Just _  -> term'
+                    where Just term' = fmap (evaluate context) mTerm'
+        Nothing -> term
+    where
+        mTerm' = evaluate1step context (Just term)
+
+func = Abs "x" $ Var 0
+value = Abs "x" $ Abs "x" $ Var 1
+app = App func value
