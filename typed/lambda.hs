@@ -1,6 +1,12 @@
+{--case と whereは段落を揃える--}
 data Type =
       Arr Type Type
     | Boolean
+
+instance Eq Type where
+    Arr srcType tgtType  == Arr srcType' tgtType' = True
+    Boolean == Boolean                            = True
+    Arr _ _ == Boolean                            = False
 
 data Term =
       Var Int
@@ -129,6 +135,43 @@ evaluate context term =
         Nothing -> term
     where
         mTerm' = evaluate1step context (Just term)
+
+getTypeFrom :: Context -> Int -> Maybe Type
+getTypeFrom context index
+    | index < (length context) = case context !! index of
+        (_, VarBind typ) -> Just typ
+        _                -> Nothing
+    | otherwise                = Nothing
+
+typeOf :: Context -> Term -> Maybe Type
+typeOf context term = case term of
+    Var index         -> getTypeFrom context index
+    Abs name typ body ->
+        case typeOf context' body of
+            Just targetType     -> Just $ Arr typ targetType
+            _                   -> Nothing
+        where
+            context' = (name, VarBind typ) : context
+    App func arg      -> case typeOf context func of
+        Just (Arr srcTyp tgtType)
+                            -> if typeOf context arg == Just srcTyp
+                                then Just tgtType
+                                else Nothing
+        _                   -> Nothing
+    Tru               -> Just Boolean
+    Fals              -> Just Boolean
+    {--修正--}
+    If cond thn els   ->
+        case typ of
+            Just Boolean
+                | typeOf context els == thnTyp -> thnTyp
+                | otherwise                    -> Nothing
+                where
+                    thnTyp = typeOf context thn
+            otherwise -> Nothing
+        where
+            typ = typeOf context thn
+
 
 x = If (Abs "x" Boolean (Var 0))
 y = evaluate1step [] $ Just $ If (Abs "x" Boolean (Var 0)) Tru Fals
