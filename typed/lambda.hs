@@ -4,9 +4,10 @@ data Type =
     | Boolean
 
 instance Eq Type where
-    Arr srcType tgtType  == Arr srcType' tgtType' = True
-    Boolean == Boolean                            = True
-    Arr _ _ == Boolean                            = False
+    Arr srcType tgtType  == Arr srcType' tgtType'
+                       = srcType == srcType' && tgtType == tgtType'
+    Boolean == Boolean = True
+    Arr _ _ == Boolean = False
 
 data Term =
       Var Int
@@ -23,9 +24,9 @@ data Binding =
     | VarBind Type
 
 instance Eq Binding where
-    NameBind  == NameBind  = True
-    NameBind  == VarBind _ = False
-    VarBind _ == VarBind _ = True
+    NameBind    == NameBind     = True
+    NameBind    == VarBind _    = False
+    VarBind typ == VarBind typ' = typ == typ'
 
 
 type Context = [(BindingName, Binding)]
@@ -37,8 +38,10 @@ instance Show Type where
 
 pickFreshName :: Context -> BindingName -> (Context, BindingName)
 pickFreshName context name
-    | ((name, NameBind) `elem` context) = pickFreshName context (name ++ "''")
-    | otherwise                         = ((name, NameBind) : context, name)
+    | ((name, NameBind) `elem` context)
+        = pickFreshName context (name ++ "''")
+    | otherwise
+        = ((name, NameBind) : context, name)
 
 showTerm :: Context -> Term -> String
 showTerm context term = case term of
@@ -51,80 +54,85 @@ showTerm context term = case term of
     App func arg      -> "(" ++ showTerm context func ++ " " ++ showTerm context arg ++ ")"
     Tru               -> "True"
     Fals              -> "False"
-    If cond thn els   -> "If (" ++ show cond ++ ") then {" ++ show thn ++ "} else {" ++ show els ++ "}"
+    If cond thn els   -> "If (" ++ show cond
+                            ++ ") then {" ++ show thn
+                            ++ "} else {" ++ show els ++ "}"
 
 instance Show Term where
     show t = showTerm [] t
 
-shiftTerm :: Term -> Int -> Term
-shiftTerm term distance = shift term 0
+
+
+shift :: Term -> Int -> Term
+shift term distance = shiftTerm term 0
     where
-        shift term cut = case term of
-            Var index         -> if index < cut
+        shiftTerm term cutoff = case term of
+            Var index         -> if index < cutoff
                                     then Var index
                                     else Var (index + distance)
             Abs name typ body -> Abs name typ shiftedBody
-                                    where shiftedBody = shift body (cut + 1)
+                                    where shiftedBody = shiftTerm body (cutoff + 1)
             App func arg      -> App shiftedFunc shiftedArg
-                                    where shiftedFunc = shift func cut;
-                                          shiftedArg = shift arg cut
+                                    where shiftedFunc = shiftTerm func cutoff;
+                                          shiftedArg  = shiftTerm arg cutoff
             Tru               -> Tru
             Fals              -> Fals
             If cond thn els   -> If cond' thn' els'
-                                    where cond' = shift cond cut;
-                                          thn' = shift thn cut;
-                                          els' = shift els cut
+                                    where cond' = shiftTerm cond cutoff;
+                                          thn'  = shiftTerm thn cutoff;
+                                          els'  = shiftTerm els cutoff
 
-substituteTerm :: Term -> Term -> Term
-substituteTerm func arg = shiftTerm term (-1)
-    where term = substitute 0 arg' func
-            where
-                arg' = shiftTerm arg 1;
-                substitute targetIndex argTerm term = case term of
-                    Var index         -> if index == targetIndex
-                                            then argTerm
-                                            else term
-                    Abs name typ body -> Abs name typ body'
-                                            where
-                                                body' = substitute (targetIndex + 1) (shiftTerm argTerm 1) body
-                    App func arg      -> App func' arg'
-                                            where
-                                                func' = substitute targetIndex argTerm func;
-                                                arg' = substitute targetIndex argTerm arg
-                    Tru               -> Tru
-                    Fals              -> Fals
-                    If cond thn els   -> If cond' thn' els'
-                                            where
-                                                cond' = substitute targetIndex argTerm cond;
-                                                thn' = substitute targetIndex argTerm thn;
-                                                els' = substitute targetIndex argTerm els
+substituteTerm targetIndex argTerm term = case term of
+    Var index         -> if index == targetIndex
+                            then argTerm
+                            else term
+    Abs name typ body -> Abs name typ body'
+                            where
+                                body' = substituteTerm (targetIndex + 1) (shift argTerm 1) body
+    App func arg      -> App func' arg'
+                            where
+                                func' = substituteTerm targetIndex argTerm func;
+                                arg'  = substituteTerm targetIndex argTerm arg
+    Tru               -> Tru
+    Fals              -> Fals
+    If cond thn els   -> If cond' thn' els'
+                            where
+                                cond' = substituteTerm targetIndex argTerm cond;
+                                thn'  = substituteTerm targetIndex argTerm thn;
+                                els'  = substituteTerm targetIndex argTerm els
+
+substitute :: Term -> Term -> Term
+substitute func arg
+    = shift (substituteTerm 0 arg' func) (-1)
+        where arg' = shift arg 1;
+
 
 
 isValue :: Context -> Term -> Bool
 isValue context term = case term of
-        Abs _ _ _ -> True
-        Tru       -> True
-        Fals      -> True
-        _         -> False
+    Abs _ _ _ -> True
+    Tru       -> True
+    Fals      -> True
+    _         -> False
 
 
 evaluate1step :: Context -> Maybe Term -> Maybe Term
 evaluate1step context term = case term of
-        Just (App (Abs x typ body) arg)
-            | isValue context arg -> Just $ substituteTerm body arg
-            | otherwise           -> Just (App (Abs x typ body) arg')
-                                        where Just arg' = evaluate1step context $ Just arg
-        Just (App func arg)       -> Just (App func' arg)
-                                        where Just func' = evaluate1step context $ Just func
-        Just (If Tru thn _)       -> Just thn
-        Just (If Fals _ els)      -> Just els
-        Just (If cond thn els)
-            -> case cond' of
-                    Just cond''   -> Just (If cond'' thn els)
-                    Nothing       -> Nothing
-                where
-                    cond' = evaluate1step context $ Just cond
-        _                         -> Nothing
+    Just (App (Abs x typ body) arg)
+        | isValue context arg
+                           -> Just $ substitute body arg
+        | otherwise        -> Just (App (Abs x typ body) arg')
+                                where Just arg' = evaluate1step context $ Just arg
+    Just (App func arg)    -> Just (App func' arg)
+                                where Just func' = evaluate1step context $ Just func
+    Just (If Tru thn _)    -> Just thn
+    Just (If Fals _ els)   -> Just els
+    Just (If cond thn els) -> case cond' of
+                                Just cond'' -> Just (If cond'' thn els)
+                                Nothing     -> Nothing
+                              where
+                                cond' = evaluate1step context $ Just cond
+    _       -> Nothing
 
 
 evaluate :: Context -> Term -> Term
